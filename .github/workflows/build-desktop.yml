@@ -40,23 +40,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
+      - name: Enable Corepack
+        run: corepack enable
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -74,24 +62,21 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Run prebuild with retry
         shell: bash
         run: |
-          for i in {1..5}; do
-            echo "🔄 Prebuild attempt $i/5..."
-            if timeout 600 pnpm run prebuild; then
+          for i in {1..3}; do
+            echo "🔄 Prebuild attempt $i/3..."
+            if timeout 300 pnpm run prebuild; then
               echo "✅ Prebuild succeeded on attempt $i"
               break
             else
-              if [ $i -eq 5 ]; then
-                echo "❌ Prebuild failed after 5 attempts"
+              if [ $i -eq 3 ]; then
+                echo "❌ Prebuild failed after 3 attempts"
                 exit 1
               fi
-              echo "⚠️ Prebuild attempt $i failed, retrying in 30 seconds..."
-              sleep 30
+              echo "⚠️ Prebuild attempt $i failed, retrying in 15 seconds..."
+              sleep 15
             fi
           done
 
