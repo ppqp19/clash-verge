@@ -32,7 +32,7 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 22
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -50,10 +50,15 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Prebuild
+      - name: Run prebuild (download cores and resources)
         run: pnpm run prebuild
 
       - uses: tauri-apps/tauri-action@v0
