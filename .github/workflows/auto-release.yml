@@ -1,0 +1,76 @@
+name: Auto Release
+
+on:
+  push:
+    tags:
+      - "v*-auto"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Install project dependencies
+        run: pnpm install
+        
+      - name: Prebuild (download cores)
+        run: pnpm run prebuild
+        
+      - name: Build Linux packages
+        run: pnpm tauri build --bundles deb,appimage
+        
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          name: 'Clash Verge Rev ${{ steps.get_version.outputs.VERSION }}'
+          body: |
+            🎉 Auto-built release for Linux x64
+            
+            ## Downloads
+            - **clash-verge_amd64.deb** - For Ubuntu/Debian systems
+            - **clash-verge_amd64.AppImage** - Universal Linux package
+            
+            ## Installation
+            ### DEB package
+            ```bash
+            sudo dpkg -i Clash\ Verge_2.3.1_amd64.deb
+            sudo apt-get install -f  # Fix dependencies if needed
+            ```
+            
+            ### AppImage
+            ```bash
+            chmod +x Clash\ Verge_2.3.1_amd64.AppImage
+            ./Clash\ Verge_2.3.1_amd64.AppImage
+            ```
+          files: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
