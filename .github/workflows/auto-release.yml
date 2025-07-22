@@ -25,9 +25,13 @@ jobs:
             bundles: "nsis"
             name: "Windows"
           - os: macos-latest
-            target: universal-apple-darwin
+            target: aarch64-apple-darwin
             bundles: "dmg"
-            name: "macOS"
+            name: "macOS-ARM64"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bundles: "dmg"
+            name: "macOS-Intel"
 
     runs-on: ${{ matrix.os }}
     
@@ -82,7 +86,6 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/*/*
             !src-tauri/target/${{ matrix.target }}/release/bundle/*/*.app
-            !src-tauri/target/${{ matrix.target }}/release/bundle/*/Clash*
 
   release:
     needs: build
@@ -115,17 +118,18 @@ jobs:
             - **clash-verge_amd64.AppImage** - Universal Linux package
             
             ### 🪟 Windows  
-            - **clash-verge_x64-setup.exe** - Windows installer
+            - **clash-verge_x64-setup.exe** - Windows x64 installer
             
             ### 🍎 macOS
-            - **clash-verge_universal.dmg** - Universal macOS package (Intel + Apple Silicon)
+            - **clash-verge_aarch64.dmg** - For Apple Silicon Macs (M1/M2/M3)
+            - **clash-verge_x64.dmg** - For Intel Macs
             
             ## 🚀 Installation Instructions
             
             ### Linux (DEB)
             ```bash
             sudo dpkg -i *.deb
-            sudo apt-get install -f  # Fix dependencies if needed
+            sudo apt-get install -f
             ```
             
             ### Linux (AppImage)
@@ -135,14 +139,17 @@ jobs:
             ```
             
             ### Windows
-            Just run the `.exe` installer
+            Run the `.exe` installer
             
             ### macOS
-            Open the `.dmg` file and drag the app to Applications folder
+            - **Apple Silicon**: Use the `aarch64.dmg` file
+            - **Intel**: Use the `x64.dmg` file
+            - Open DMG and drag app to Applications folder
             
             ---
-            Built automatically with GitHub Actions 🤖
+            🤖 Built automatically with GitHub Actions
           files: |
             Linux-build/**/*
             Windows-build/**/*
-            macOS-build/**/*
+            macOS-ARM64-build/**/*
+            macOS-Intel-build/**/*
