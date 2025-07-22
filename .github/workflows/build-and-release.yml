@@ -18,14 +18,19 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+            rust-target: 'aarch64-apple-darwin'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
+            rust-target: 'x86_64-apple-darwin'
           - platform: 'ubuntu-22.04'
             args: ''
+            rust-target: 'x86_64-unknown-linux-gnu'
           - platform: 'windows-latest'
             args: ''
+            rust-target: 'x86_64-pc-windows-msvc'
 
     runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -48,7 +53,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.rust-target }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -58,8 +63,38 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Run prebuild (download cores and resources)
-        run: pnpm run prebuild
+      - name: Run prebuild with cross-platform timeout
+        shell: bash
+        run: |
+          # Cross-platform timeout function
+          run_with_timeout() {
+            local timeout_duration=600
+            local command="$1"
+            
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              # Windows doesn't have timeout command, use PowerShell
+              powershell -Command "& { Start-Process -FilePath 'cmd' -ArgumentList '/c', '$command' -Wait -TimeoutSec $timeout_duration }"
+            else
+              # Unix-like systems
+              timeout $timeout_duration bash -c "$command"
+            fi
+          }
+          
+          # Retry prebuild up to 3 times
+          for i in {1..3}; do
+            echo "Prebuild attempt $i"
+            if run_with_timeout "pnpm run prebuild"; then
+              echo "Prebuild successful"
+              break
+            else
+              echo "Prebuild attempt $i failed, retrying..."
+              sleep 10
+            fi
+            if [ $i -eq 3 ]; then
+              echo "All prebuild attempts failed"
+              exit 1
+            fi
+          done
 
       - uses: tauri-apps/tauri-action@v0
         env:
