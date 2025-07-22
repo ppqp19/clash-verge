@@ -1,17 +1,36 @@
-name: Auto Release
+name: Auto Release (Multi-Platform)
 
 on:
   push:
     tags:
       - "v*-auto"
+      - "v*-build-*"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bundles: "deb,appimage"
+            name: "Linux"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: "nsis"
+            name: "Windows"
+          - os: macos-latest
+            target: universal-apple-darwin
+            bundles: "dmg"
+            name: "macOS"
+
+    runs-on: ${{ matrix.os }}
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,13 +45,16 @@ jobs:
         with:
           run_install: false
           
-      - name: Install system dependencies
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
         
       - name: Install project dependencies
         run: pnpm install
@@ -40,37 +62,87 @@ jobs:
       - name: Prebuild (download cores)
         run: pnpm run prebuild
         
-      - name: Build Linux packages
-        run: pnpm tauri build --bundles deb,appimage
+      - name: Build ${{ matrix.name }} packages
+        run: pnpm tauri build --bundles ${{ matrix.bundles }} --target ${{ matrix.target }}
         
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=development" >> $GITHUB_OUTPUT
+          fi
         
-      - name: Create Release
+      - name: Upload ${{ matrix.name }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-build
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/*/*
+            !src-tauri/target/${{ matrix.target }}/release/bundle/*/*.app
+            !src-tauri/target/${{ matrix.target }}/release/bundle/*/Clash*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        
+      - name: Get version from tag
+        id: get_version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=development" >> $GITHUB_OUTPUT
+          fi
+        
+      - name: Create Multi-Platform Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.get_version.outputs.VERSION }}
-          name: 'Clash Verge Rev ${{ steps.get_version.outputs.VERSION }}'
+          name: 'Clash Verge Rev ${{ steps.get_version.outputs.VERSION }} (Multi-Platform)'
           body: |
-            🎉 Auto-built release for Linux x64
+            🎉 Multi-Platform Auto-Built Release
             
-            ## Downloads
+            ## 📦 Available Downloads
+            
+            ### 🐧 Linux
             - **clash-verge_amd64.deb** - For Ubuntu/Debian systems
             - **clash-verge_amd64.AppImage** - Universal Linux package
             
-            ## Installation
-            ### DEB package
+            ### 🪟 Windows  
+            - **clash-verge_x64-setup.exe** - Windows installer
+            
+            ### 🍎 macOS
+            - **clash-verge_universal.dmg** - Universal macOS package (Intel + Apple Silicon)
+            
+            ## 🚀 Installation Instructions
+            
+            ### Linux (DEB)
             ```bash
-            sudo dpkg -i Clash\ Verge_2.3.1_amd64.deb
+            sudo dpkg -i *.deb
             sudo apt-get install -f  # Fix dependencies if needed
             ```
             
-            ### AppImage
+            ### Linux (AppImage)
             ```bash
-            chmod +x Clash\ Verge_2.3.1_amd64.AppImage
-            ./Clash\ Verge_2.3.1_amd64.AppImage
+            chmod +x *.AppImage
+            ./*.AppImage
             ```
+            
+            ### Windows
+            Just run the `.exe` installer
+            
+            ### macOS
+            Open the `.dmg` file and drag the app to Applications folder
+            
+            ---
+            Built automatically with GitHub Actions 🤖
           files: |
-            src-tauri/target/release/bundle/deb/*.deb
-            src-tauri/target/release/bundle/appimage/*.AppImage
+            Linux-build/**/*
+            Windows-build/**/*
+            macOS-build/**/*
