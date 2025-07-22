@@ -18,88 +18,52 @@ jobs:
         include:
           - platform: 'ubuntu-22.04'
             args: ''
-            name: 'Linux'
           - platform: 'windows-latest'
             args: ''
-            name: 'Windows'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
-            name: 'macOS-Intel'
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
-            name: 'macOS-ARM'
 
     runs-on: ${{ matrix.platform }}
-    timeout-minutes: 60
+    timeout-minutes: 45
     
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: setup node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: lts/*
 
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Linux dependencies
+      - name: install dependencies (ubuntu only)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev xdg-utils
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      - name: Install Rust stable
+      - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ contains(matrix.args, 'target') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Run prebuild with retry
-        shell: bash
+      - name: install frontend dependencies
         run: |
-          for i in {1..3}; do
-            echo "🔄 Prebuild attempt $i/3..."
-            if timeout 300 pnpm run prebuild; then
-              echo "✅ Prebuild succeeded on attempt $i"
-              break
-            else
-              if [ $i -eq 3 ]; then
-                echo "❌ Prebuild failed after 3 attempts"
-                exit 1
-              fi
-              echo "⚠️ Prebuild attempt $i failed, retrying in 15 seconds..."
-              sleep 15
-            fi
-          done
+          corepack enable
+          pnpm install
 
-      - name: Build app
-        uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: app-v__VERSION__
           releaseName: 'Clash Verge Rev v__VERSION__'
-          releaseBody: |
-            🎉 Desktop Release for Windows, macOS, and Linux
-            
-            ## Downloads
-            - **Windows**: `.exe` installer
-            - **macOS Intel**: `.dmg` for Intel Macs  
-            - **macOS ARM**: `.dmg` for Apple Silicon Macs (M1/M2/M3)
-            - **Linux**: `.deb` and `.AppImage` packages
-            
-            ## Installation
-            - Windows: Run the `.exe` file
-            - macOS: Open `.dmg` and drag to Applications
-            - Linux: `sudo dpkg -i *.deb` or `chmod +x *.AppImage && ./*.AppImage`
+          releaseBody: 'Desktop Release for Windows, macOS, and Linux'
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
