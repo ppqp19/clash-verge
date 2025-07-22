@@ -75,7 +75,7 @@ const META_ALPHA_MAP = {
 };
 
 // Fetch the latest alpha release version from the version.txt file
-async function getLatestAlphaVersion(maxRetries = 3) {
+async function getLatestAlphaVersion() {
   const options = {};
 
   const httpProxy =
@@ -87,42 +87,17 @@ async function getLatestAlphaVersion(maxRetries = 3) {
   if (httpProxy) {
     options.agent = new HttpsProxyAgent(httpProxy);
   }
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      log_info(`Fetching latest alpha version (attempt ${attempt}/${maxRetries})`);
-      
-      const response = await fetch(META_ALPHA_VERSION_URL, {
-        ...options,
-        method: "GET",
-        timeout: 30000, // 30 seconds timeout
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; clash-verge-rev)"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      let v = await response.text();
-      META_ALPHA_VERSION = v.trim(); // Trim to remove extra whitespaces
-      log_success(`Latest alpha version: ${META_ALPHA_VERSION}`);
-      return;
-
-    } catch (error) {
-      log_error(`Alpha version fetch attempt ${attempt} failed:`, error.message);
-      
-      if (attempt === maxRetries) {
-        log_error("Failed to fetch latest alpha version after all retries");
-        process.exit(1);
-      }
-      
-      // Wait before retry
-      const delay = Math.min(1000 * attempt, 5000);
-      log_info(`Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
+  try {
+    const response = await fetch(META_ALPHA_VERSION_URL, {
+      ...options,
+      method: "GET",
+    });
+    let v = await response.text();
+    META_ALPHA_VERSION = v.trim(); // Trim to remove extra whitespaces
+    log_info(`Latest alpha version: ${META_ALPHA_VERSION}`);
+  } catch (error) {
+    log_error("Error fetching latest alpha version:", error.message);
+    process.exit(1);
   }
 }
 
@@ -147,7 +122,7 @@ const META_MAP = {
 };
 
 // Fetch the latest release version from the version.txt file
-async function getLatestReleaseVersion(maxRetries = 3) {
+async function getLatestReleaseVersion() {
   const options = {};
 
   const httpProxy =
@@ -159,42 +134,17 @@ async function getLatestReleaseVersion(maxRetries = 3) {
   if (httpProxy) {
     options.agent = new HttpsProxyAgent(httpProxy);
   }
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      log_info(`Fetching latest release version (attempt ${attempt}/${maxRetries})`);
-      
-      const response = await fetch(META_VERSION_URL, {
-        ...options,
-        method: "GET",
-        timeout: 30000, // 30 seconds timeout
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; clash-verge-rev)"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      let v = await response.text();
-      META_VERSION = v.trim(); // Trim to remove extra whitespaces
-      log_success(`Latest release version: ${META_VERSION}`);
-      return;
-
-    } catch (error) {
-      log_error(`Release version fetch attempt ${attempt} failed:`, error.message);
-      
-      if (attempt === maxRetries) {
-        log_error("Failed to fetch latest release version after all retries");
-        process.exit(1);
-      }
-      
-      // Wait before retry
-      const delay = Math.min(1000 * attempt, 5000);
-      log_info(`Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
+  try {
+    const response = await fetch(META_VERSION_URL, {
+      ...options,
+      method: "GET",
+    });
+    let v = await response.text();
+    META_VERSION = v.trim(); // Trim to remove extra whitespaces
+    log_info(`Latest release version: ${META_VERSION}`);
+  } catch (error) {
+    log_error("Error fetching latest release version:", error.message);
+    process.exit(1);
   }
 }
 
@@ -371,8 +321,8 @@ async function resolveResource(binInfo) {
 }
 
 /**
- * download file and save to `path` with retry mechanism
- */ async function downloadFile(url, path, maxRetries = 3) {
+ * download file and save to `path`
+ */ async function downloadFile(url, path) {
   const options = {};
 
   const httpProxy =
@@ -385,43 +335,15 @@ async function resolveResource(binInfo) {
     options.agent = new HttpsProxyAgent(httpProxy);
   }
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      log_info(`Downloading ${url} (attempt ${attempt}/${maxRetries})`);
-      
-      const response = await fetch(url, {
-        ...options,
-        method: "GET",
-        headers: { 
-          "Content-Type": "application/octet-stream",
-          "User-Agent": "Mozilla/5.0 (compatible; clash-verge-rev)"
-        },
-        timeout: 120000, // 2 minutes timeout
-      });
+  const response = await fetch(url, {
+    ...options,
+    method: "GET",
+    headers: { "Content-Type": "application/octet-stream" },
+  });
+  const buffer = await response.arrayBuffer();
+  await fsp.writeFile(path, new Uint8Array(buffer));
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const buffer = await response.arrayBuffer();
-      await fsp.writeFile(path, new Uint8Array(buffer));
-      
-      log_success(`Download finished: ${url}`);
-      return;
-
-    } catch (error) {
-      log_error(`Download attempt ${attempt} failed:`, error.message);
-      
-      if (attempt === maxRetries) {
-        throw new Error(`Failed to download ${url} after ${maxRetries} attempts: ${error.message}`);
-      }
-      
-      // Wait before retry with exponential backoff
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-      log_info(`Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
+  log_success(`download finished: ${url}`);
 }
 
 // SimpleSC.dll
